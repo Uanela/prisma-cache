@@ -110,9 +110,13 @@ const bento = new BentoCache({
 - **Prisma**: 5.0+ (requires DMMF access)
 - **BentoCache**: 1.0+
 
+---
+
 ## License
 
 MIT
+
+---
 
 <div align="center">
 
