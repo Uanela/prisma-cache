@@ -8,12 +8,12 @@ No configuration required beyond setup. It reads your Prisma schema at runtime v
 
 ---
 
-## Install
+## Installation
 
 ```bash
-npm install prisma-caching bentocache
+npm install prisma-smart-cache bentocache
 # or
-pnpm add prisma-caching bentocache
+pnpm add prisma-smart-cache bentocache
 ```
 
 ---
@@ -21,7 +21,7 @@ pnpm add prisma-caching bentocache
 ## Setup
 
 ```ts
-import { withCache } from "prisma-caching";
+import { smartCache } from "prisma-smart-cache";
 import { PrismaClient } from "@prisma/client";
 import { BentoCache, bentostore } from "bentocache";
 import { memoryDriver } from "bentocache/drivers/memory";
@@ -33,7 +33,7 @@ const bento = new BentoCache({
   },
 });
 
-const prisma = withCache(new PrismaClient(), bento, { ttl: 120 });
+const prisma = smartCache(new PrismaClient(), bento, { ttl: 120 });
 ```
 
 That's it. Use `prisma` exactly as you normally would.
@@ -92,7 +92,7 @@ await prisma.user.update({
 When a write happens on a model:
 
 1. All cached entries tagged with that model are invalidated immediately.
-2. For related models, prisma-caching walks the stored query shapes and checks which fields were selected.
+2. For related models, prisma-smart-cache walks the stored query shapes and checks which fields were selected.
 3. If the mutated fields overlap with the selected fields, the entry is invalidated. Otherwise it is left untouched.
 
 Example: a `user.update` that only changes `birthday` will not invalidate a cached `post.findMany` that only included `user: { select: { name: true } }`.
@@ -139,10 +139,10 @@ const bento = new BentoCache({
   },
 });
 
-const prisma = withCache(new PrismaClient(), bento);
+const prisma = smartCache(new PrismaClient(), bento);
 ```
 
-prisma-caching delegates all storage, TTL, stampede protection, and grace periods to BentoCache. Any driver BentoCache supports works here.
+prisma-smart-cache delegates all storage, TTL, stampede protection, and grace periods to BentoCache. Any driver BentoCache supports works here.
 
 ---
 
@@ -152,8 +152,14 @@ prisma-caching delegates all storage, TTL, stampede protection, and grace period
 - Prisma >= 5
 - BentoCache >= 1.0
 
----
-
 ## License
 
 MIT
+
+---
+
+<div align="center">
+
+Built with ❤️ by [Uanela Como](https://github.com/uanela)
+
+</div>
