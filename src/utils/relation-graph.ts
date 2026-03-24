@@ -1,5 +1,6 @@
 import type { DMMFDatamodel } from "../types";
 import * as prismaClient from "@prisma/client";
+import { toKebab } from "./casing";
 
 export class RelationGraph {
   /** modelName → Set<relatedModelName> */
@@ -25,14 +26,14 @@ export class RelationGraph {
     const fieldMap = new Map<string, Map<string, string>>();
 
     for (const model of datamodel.models) {
-      const name = model.name.toLowerCase();
+      const name = toKebab(model.name);
 
       if (!graph.has(name)) graph.set(name, new Set());
       if (!fieldMap.has(name)) fieldMap.set(name, new Map());
 
       for (const field of model.fields) {
         if (field.relationName) {
-          const relatedModel = field.type.toLowerCase();
+          const relatedModel = toKebab(field.type);
           graph.get(name)!.add(relatedModel);
           fieldMap.get(name)!.set(field.name, relatedModel);
         }
@@ -44,7 +45,7 @@ export class RelationGraph {
 
   /** Get all model names directly related to a given model */
   getRelatedModels(model: string): string[] {
-    return [...(this.graph.get(model.toLowerCase()) ?? [])];
+    return [...(this.graph.get(toKebab(model)) ?? [])];
   }
 
   /**
@@ -57,7 +58,7 @@ export class RelationGraph {
       (args?.include as Record<string, unknown> | undefined) ??
       (args?.select as Record<string, unknown> | undefined);
 
-    this.walkIncludes(model.toLowerCase(), includeOrSelect, included);
+    this.walkIncludes(toKebab(model), includeOrSelect, included);
     return [...included];
   }
 

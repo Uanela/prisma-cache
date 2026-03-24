@@ -1,8 +1,37 @@
 import type { BentoCache } from "bentocache";
-import type { WithCacheOptions } from "./types.js";
-import { PrismaCache } from "./prisma-cache.js";
+import type { PrismaArgsWithCache, WithCacheOptions } from "./types";
+import { PrismaSmartCache } from "./prisma-smart-cache";
 
 type PrismaClient = Record<string, any>;
+
+/**
+ * Extends a Prisma operation function to include our custom cache options.
+ */
+type CacheableFunction<F> = F extends (...args: infer A) => infer R
+  ? (
+      args: A[0] extends undefined
+        ? PrismaArgsWithCache
+        : A[0] & PrismaArgsWithCache
+    ) => R
+  : F;
+
+/**
+ * Maps over a Prisma Model (e.g., prisma.user) and wraps its methods.
+ */
+type CachedModel<M> = {
+  [K in keyof M]: CacheableFunction<M[K]>;
+};
+
+/**
+ * The final Result Type that adds .cache to every model method
+ */
+export type PrismaWithCache<T> = {
+  [K in keyof T]: T[K] extends Record<string, any>
+    ? K extends `\$${string}` // Skip internal $connect, $queryRaw, etc.
+      ? T[K]
+      : CachedModel<T[K]>
+    : T[K];
+};
 
 /**
  * Wrap a PrismaClient instance with automatic caching powered by BentoCache.
@@ -14,7 +43,7 @@ type PrismaClient = Record<string, any>;
  *
  * @example
  * ```ts
- * import { withCache } from 'prisma-caching'
+ * import { smartCache } from 'prisma-smart-cache'
  * import { BentoCache, bentostore } from 'bentocache'
  * import { memoryDriver } from 'bentocache/drivers/memory'
  *
@@ -23,7 +52,7 @@ type PrismaClient = Record<string, any>;
  *   stores: { memory: bentostore().useL1Layer(memoryDriver()) }
  * })
  *
- * const prisma = withCache(new PrismaClient(), bento, { ttl: 120 })
+ * const prisma = smartCache(new PrismaClient(), bento, { ttl: 120 })
  *
  * // cached query
  * const users = await prisma.user.findMany({
@@ -43,12 +72,12 @@ type PrismaClient = Record<string, any>;
  * })
  * ```
  */
-export function withCache<T extends PrismaClient>(
+export function smartCache<T extends PrismaClient>(
   prismaClient: T,
   bentoCache: BentoCache<any>,
   options: WithCacheOptions = {}
-): T {
-  const handler = new PrismaCache(bentoCache, options);
+): PrismaWithCache<T> {
+  const handler = new PrismaSmartCache(bentoCache, options);
 
   return new Proxy(prismaClient, {
     get(target, modelName) {

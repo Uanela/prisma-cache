@@ -9,7 +9,7 @@ export function buildCacheKey(
   args: object
 ): string {
   const serialized = args ? sortedStringify(args) : "";
-  return `prisma-cache:${model}:${operation}:${serialized}`;
+  return `prisma-smart-cache:${model}:${operation}:${serialized}`;
 }
 
 /**
