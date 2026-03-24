@@ -1,5 +1,5 @@
 {
-  "name": "prismacache",
+  "name": "prisma-caching",
   "version": "0.1.0",
   "description": "Automatic relation-aware caching for Prisma powered by BentoCache",
   "main": "./dist/index.js",

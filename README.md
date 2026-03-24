@@ -11,9 +11,9 @@ No configuration required beyond setup. It reads your Prisma schema at runtime v
 ## Install
 
 ```bash
-npm install prismacache bentocache
+npm install prisma-caching bentocache
 # or
-pnpm add prismacache bentocache
+pnpm add prisma-caching bentocache
 ```
 
 ---
@@ -21,7 +21,7 @@ pnpm add prismacache bentocache
 ## Setup
 
 ```ts
-import { withCache } from "prismacache";
+import { withCache } from "prisma-caching";
 import { PrismaClient } from "@prisma/client";
 import { BentoCache, bentostore } from "bentocache";
 import { memoryDriver } from "bentocache/drivers/memory";
@@ -92,7 +92,7 @@ await prisma.user.update({
 When a write happens on a model:
 
 1. All cached entries tagged with that model are invalidated immediately.
-2. For related models, prismacache walks the stored query shapes and checks which fields were selected.
+2. For related models, prisma-caching walks the stored query shapes and checks which fields were selected.
 3. If the mutated fields overlap with the selected fields, the entry is invalidated. Otherwise it is left untouched.
 
 Example: a `user.update` that only changes `birthday` will not invalidate a cached `post.findMany` that only included `user: { select: { name: true } }`.
@@ -142,7 +142,7 @@ const bento = new BentoCache({
 const prisma = withCache(new PrismaClient(), bento);
 ```
 
-prismacache delegates all storage, TTL, stampede protection, and grace periods to BentoCache. Any driver BentoCache supports works here.
+prisma-caching delegates all storage, TTL, stampede protection, and grace periods to BentoCache. Any driver BentoCache supports works here.
 
 ---
 
