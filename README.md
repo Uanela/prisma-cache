@@ -1,162 +1,118 @@
-# Prisma Cache
+# Prisma Smart Cache
 
-Automatic relation-aware caching for Prisma, powered by BentoCache.
+**The Missing Persistence Layer for Prisma.**
 
-Wraps your PrismaClient with a transparent proxy. Read operations are cached. Write operations run normally and automatically invalidate affected cache entries — including entries from related models, down to the field level.
+`prisma-smart-cache` is a high-performance, relation-aware caching proxy powered by **BentoCache**. It transforms your database access from a bottleneck into a lightning-fast distributed system with zero boilerplate.
 
-No configuration required beyond setup. It reads your Prisma schema at runtime via DMMF.
+## Why this is different
 
----
+Most Prisma caches are "dumb"—they invalidate the whole model when anything changes. This library uses **Field-Level Diffing**:
 
-## Installation
-
-```bash
-npm install prisma-smart-cache bentocache
-# or
-pnpm add prisma-smart-cache bentocache
-```
+- **Granular Invalidation:** If you update `user.password`, it won't kill a cache entry that only selected `user.name`.
+- **Relation-Aware:** It automatically tracks nested `include` and `select` calls. If a `Post` cache includes an `Author`, a change to the `Author` triggers a surgical strike on the `Post` cache.
+- **Multi-Tier Ready:** Seamlessly combine L1 (Memory) and L2 (Redis) via BentoCache to survive massive traffic spikes.
 
 ---
 
-## Setup
+## Quick Start
 
 ```ts
-import { smartCache } from "prisma-smart-cache";
 import { PrismaClient } from "@prisma/client";
 import { BentoCache, bentostore } from "bentocache";
 import { memoryDriver } from "bentocache/drivers/memory";
+import { smartCache } from "prisma-smart-cache";
 
 const bento = new BentoCache({
-  default: "memory",
+  default: "fast",
   stores: {
-    memory: bentostore().useL1Layer(memoryDriver()),
+    fast: bentostore().useL1Layer(memoryDriver()),
   },
 });
 
-const prisma = smartCache(new PrismaClient(), bento, { ttl: 120 });
+// Wrap and go.
+const prisma = smartCache(new PrismaClient(), bento, { ttl: 60 });
 ```
-
-That's it. Use `prisma` exactly as you normally would.
 
 ---
 
-## Usage
+## Advanced Logic
 
-### Basic cached query
+### Surgical Invalidation
+
+The library tracks the "Query Shape." When a write occurs, it compares the mutated fields against the fields stored in your cached results.
 
 ```ts
-const users = await prisma.user.findMany({
-  where: { active: true },
+// Cached query (only selects 'email')
+await prisma.user.findUnique({
+  where: { id: 1 },
+  select: { email: true },
 });
-```
 
-Cached automatically. Same args on the next call returns from cache.
-
-### Per-query options
-
-```ts
-const users = await prisma.user.findMany({
-  where: { active: true },
-  cache: {
-    ttl: 30, // override TTL in seconds
-    tags: ["active-users"], // custom tags for manual invalidation
-    key: "active-users", // custom cache key
-  },
-});
-```
-
-### Skip cache for a specific query
-
-```ts
-const fresh = await prisma.user.findMany({
-  cache: { disable: true },
-});
-```
-
-### Writes invalidate automatically
-
-```ts
+// This update will NOT invalidate the cache above because 'bio' wasn't selected.
 await prisma.user.update({
   where: { id: 1 },
-  data: { name: "Uanela" },
+  data: { bio: "New bio" },
 });
-// All cached queries involving `user` are invalidated.
-// Related model caches (e.g. posts that included user) are evaluated
-// and only invalidated if they selected the mutated fields.
 ```
 
----
+### Protection Against Cache Stampedes
 
-## How invalidation works
-
-When a write happens on a model:
-
-1. All cached entries tagged with that model are invalidated immediately.
-2. For related models, prisma-smart-cache walks the stored query shapes and checks which fields were selected.
-3. If the mutated fields overlap with the selected fields, the entry is invalidated. Otherwise it is left untouched.
-
-Example: a `user.update` that only changes `birthday` will not invalidate a cached `post.findMany` that only included `user: { select: { name: true } }`.
-
-This logic is entirely automatic. It uses Prisma's runtime DMMF to build the relation graph — no manual model registration needed.
+Leveraging BentoCache's underlying logic, this library prevents "Cache-Miss Storms" where thousands of concurrent requests hit your database simultaneously when a key expires.
 
 ---
 
-## Global options
+## API Reference
 
-| Option | Type       | Default | Description                               |
-| ------ | ---------- | ------- | ----------------------------------------- |
-| `ttl`  | `number`   | `60`    | Default TTL in seconds for all queries    |
-| `tags` | `string[]` | `[]`    | Default tags applied to every cache entry |
+### Global Configuration
 
----
+| Option | Type       | Description                                                    |
+| :----- | :--------- | :------------------------------------------------------------- |
+| `ttl`  | `number`   | Global expiration in seconds (default: 60).                    |
+| `tags` | `string[]` | Permanent tags for every entry (useful for multi-tenant apps). |
 
-## Per-query cache options
+### Per-Query Control
 
-| Option    | Type       | Description                                 |
-| --------- | ---------- | ------------------------------------------- |
-| `ttl`     | `number`   | TTL in seconds, overrides global default    |
-| `tags`    | `string[]` | Additional tags for this entry              |
-| `key`     | `string`   | Custom cache key, auto-generated if omitted |
-| `disable` | `boolean`  | Skip cache entirely for this query          |
-
----
-
-## Using Redis
+Add a `cache` object to any Prisma CRUD operation:
 
 ```ts
-import { BentoCache, bentostore } from "bentocache";
-import { memoryDriver } from "bentocache/drivers/memory";
-import { redisDriver } from "bentocache/drivers/redis";
-
-const bento = new BentoCache({
-  default: "multitier",
-  stores: {
-    multitier: bentostore()
-      .useL1Layer(memoryDriver())
-      .useL2Layer(
-        redisDriver({ connection: { host: "localhost", port: 6379 } })
-      ),
+const data = await prisma.post.findMany({
+  where: { published: true },
+  cache: {
+    ttl: 300,
+    tags: ["homepage-content"],
+    disable: false, // set to true to force a DB hit
   },
 });
-
-const prisma = smartCache(new PrismaClient(), bento);
 ```
-
-prisma-smart-cache delegates all storage, TTL, stampede protection, and grace periods to BentoCache. Any driver BentoCache supports works here.
 
 ---
 
-## Requirements
+## Performance Tip: Hybrid Redis
 
-- Node.js >= 18
-- Prisma >= 5
-- BentoCache >= 1.0
+For production, always use a multi-tier setup. This keeps hot data in local RAM (L1) while keeping the source of truth in Redis (L2).
+
+```ts
+const bento = new BentoCache({
+  default: "production",
+  stores: {
+    production: bentostore()
+      .useL1Layer(memoryDriver())
+      .useL2Layer(redisDriver({ connection: { host: "localhost" } })),
+  },
+});
+```
+
+---
+
+## Production Requirements
+
+- **Node.js**: 18.x or higher
+- **Prisma**: 5.0+ (requires DMMF access)
+- **BentoCache**: 1.0+
 
 ## License
 
 MIT
-
----
 
 <div align="center">
 
